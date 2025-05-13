@@ -9,6 +9,8 @@ from langchain_openai import ChatOpenAI
 from browser_use import Agent, Browser
 from dotenv import load_dotenv
 from threading import Thread
+from browser_use.agent.service import set_current_session
+
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +42,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             use_vision=True,
         )
         session_agents[session_id] = agent
+        set_current_session(session_id)
         logging.info(f"Agent iniciado com session_id={session_id}, task={task}")
         t1 = Thread(target=self.start_agent_sync, args=(agent,))
         t1.start()

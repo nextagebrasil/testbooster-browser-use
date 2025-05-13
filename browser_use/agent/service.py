@@ -80,10 +80,10 @@ class WebSocketLogHandler(logging.Handler):
             if any(tag in msg for tag in ["📄 Result", "✅ Task completed", "❌ Unfinished"]):
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(send_test_response("log", {"log": msg}))
+                    loop.create_task(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
                 except RuntimeError:
                     loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(send_test_response("log", {"log": msg}), loop)
+                    asyncio.run_coroutine_threadsafe(send_test_response(CURRENT_SESSION_ID, {"log": msg}), loop)
         except Exception as e:
             print(f"[WebSocketLogHandler] erro ao emitir log: {e}")
 
@@ -91,6 +91,12 @@ class WebSocketLogHandler(logging.Handler):
 load_dotenv()
 logger = logging.getLogger(__name__)
 logger.addHandler(WebSocketLogHandler())
+
+CURRENT_SESSION_ID: str = None
+
+def set_current_session(id: str):
+    global CURRENT_SESSION_ID
+    CURRENT_SESSION_ID = id
 
 
 SKIP_LLM_API_KEY_VERIFICATION = os.environ.get('SKIP_LLM_API_KEY_VERIFICATION', 'false').lower()[0] in 'ty1'
@@ -109,17 +115,17 @@ def log_response(response: AgentOutput) -> None:
     # log evaluation
     msg = f'{emoji} Eval: {response.current_state.evaluation_previous_goal}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log memory
     msg = f'🧠 Memory: {response.current_state.memory}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log next goal
     msg = f'🎯 Next goal: {response.current_state.next_goal}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log each action
     for i, action in enumerate(response.action):
@@ -128,7 +134,7 @@ def log_response(response: AgentOutput) -> None:
             f'{action.model_dump_json(exclude_unset=True)}'
         )
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
 
 Context = TypeVar('Context')
@@ -484,7 +490,7 @@ class Agent(Generic[Context]):
         """Execute one step of the task"""
         msg = f'📍 Step {self.state.n_steps}'
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
         state = None
         model_output = None
@@ -1168,33 +1174,33 @@ class Agent(Generic[Context]):
         if not is_valid:
             decision_msg = f'❌ Validator decision: {parsed.reason}'
             logger.info(decision_msg)
-            track_log_send(send_test_response("log", {"log": decision_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
 
             failure_msg = f'The output is not yet correct. {parsed.reason}.'
             self.state.last_result = [ActionResult(extracted_content=failure_msg, include_in_memory=True)]
-            track_log_send(send_test_response("log", {"log": failure_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": failure_msg}))
         else:
             decision_msg = f'✅ Validator decision: {parsed.reason}'
             logger.info(decision_msg)
-            track_log_send(send_test_response("log", {"log": decision_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
 
         return is_valid
 
     async def log_completion(self) -> None:
         """Log the completion of the task"""
         logger.info('✅ Task completed')
-        track_log_send(send_test_response("log", {"log": "✅ Task completed"}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Task completed"}))
 
         if self.state.history.is_successful():
             logger.info('✅ Successfully')
-            track_log_send(send_test_response("log", {"log": "✅ Successfully"}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Successfully"}))
         else:
             logger.info('❌ Unfinished')
-            track_log_send(send_test_response("log", {"log": "❌ Unfinished"}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "❌ Unfinished"}))
 
         total_tokens = self.state.history.total_input_tokens()
         logger.info(f'📝 Total input tokens used (approximate): {total_tokens}')
-        track_log_send(send_test_response("log", {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
 
         if self.register_done_callback:
             if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1358,7 +1364,7 @@ class Agent(Generic[Context]):
         """Stop the agent"""
         msg = '⏹️ Agent stopping'
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
         self.state.stopped = True
 
     def _convert_initial_actions(self, actions: list[dict[str, dict[str, Any]]]) -> list[ActionModel]:
