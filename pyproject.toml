@@ -38,6 +38,7 @@ dependencies = [
     "rich>=14.0.0",
     "click>=8.1.8",
     "textual>=3.2.0",
+    "websockets>=15.0.1",
 ]
 # pydantic: >2.11 introduces many pydantic deprecation warnings until langchain-core upgrades their pydantic support lets keep it on 2.10
 # google-api-core: only used for Google LLM APIs
