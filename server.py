@@ -50,6 +50,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def start_agent_sync(self, agent: Agent):
         result = asyncio.run(agent.run())
+        #logging.info('\n \n 🔴🔴🔴🔴 result: ' + str(result.status))
 
     def do_POST(self):
         if self.path == '/start-agent/':
@@ -102,7 +103,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
             # Caso exista método para encerrar o browser, utilize:
             # Exemplo seguro:
-            if hasattr(agent.browser, 'close') and callable(agent.browser.close):
+            if agent.browser:
+                logging.info('🔴🔴🔴🔴 agent.browser')
                 agent.browser.close()
                 agent.pause()
                 agent.close()
