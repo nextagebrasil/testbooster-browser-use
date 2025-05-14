@@ -104,7 +104,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             # Caso exista método para encerrar o browser, utilize:
             # Exemplo seguro:
             if agent.browser:
-                logging.info('🔴🔴🔴🔴 agent.browser')
+                #logging.info('🔴🔴🔴🔴 agent.browser')
                 agent.browser.close()
                 agent.pause()
                 agent.close()
