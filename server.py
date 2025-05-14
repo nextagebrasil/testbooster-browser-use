@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
 from browser_use import Agent, Browser
+from browser_use.agent.service import set_current_session
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             use_vision=True,
         )
         session_agents[session_id] = agent
+        set_current_session(session_id)
         logging.info(f"Agent iniciado com session_id={session_id}, task={task}")
         Thread(target=self.start_agent_sync, args=(agent, session_id)).start()
 
@@ -46,6 +48,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         from browser_use.agent.service import set_current_session
         set_current_session(session_id)
         result = asyncio.run(agent.run())
+        # logging.info('\n \n 🔴🔴🔴🔴 result: ' + str(result.status))
 
     def do_POST(self):
         if self.path == '/start-agent/':
@@ -100,7 +103,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
             # Caso exista método para encerrar o browser, utilize:
             # Exemplo seguro:
-            if hasattr(agent.browser, 'close') and callable(agent.browser.close):
+            if agent.browser:
+                # logging.info('🔴🔴🔴🔴 agent.browser')
                 agent.browser.close()
                 agent.pause()
                 agent.close()

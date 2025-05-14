@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: testbooster-browser-use
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: testbooster-browser-use
+  template:
+    metadata:
+      labels:
+        app: testbooster-browser-use
+    spec:
+      containers:
+      - name: web-ui
+        image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.1
+        ports:
+        - containerPort: 9090
+        envFrom:
+        - secretRef:
+            name: testbooster-browser-use-env
