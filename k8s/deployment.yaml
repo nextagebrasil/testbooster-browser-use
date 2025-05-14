@@ -13,8 +13,8 @@ spec:
         app: testbooster-browser-use
     spec:
       containers:
-      - name: web-ui
-        image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.1
+      - name: browser-use
+        image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.3
         ports:
         - containerPort: 9090
         envFrom:

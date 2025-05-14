@@ -70,7 +70,7 @@ spec:
         app: testbooster-browser-use
     spec:
       containers:
-      - name: web-ui
+      - name: browser-use
         image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:latest
         ports:
         - containerPort: 7788
@@ -137,9 +137,9 @@ kubectl logs -l app=testbooster-browser-use -f
 
 
 # Processo Resumido:
-docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.1 .
+docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.3 .
 gcloud auth configure-docker us-east1-docker.pkg.dev
-docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.1
+docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.3
 gcloud container clusters get-credentials testbooster-browser-use-cluster --region us-central1 --project testbooster
 # 1) Pega o número do projeto
 $projectNumber = gcloud projects describe testbooster --format="value(projectNumber)"
