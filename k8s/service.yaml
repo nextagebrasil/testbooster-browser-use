@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: testbooster-browser-use
+spec:
+  type: LoadBalancer
+  selector:
+    app: testbooster-browser-use
+  ports:
+  - port: 80
+    targetPort: 9090

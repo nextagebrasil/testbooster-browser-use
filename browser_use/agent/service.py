@@ -61,8 +61,43 @@ from browser_use.telemetry.views import (
 )
 from browser_use.utils import check_env_variables, time_execution_async, time_execution_sync
 
+
+import json
+from websockets.legacy.client import connect
+
+pending_websocket_logs: list[asyncio.Task] = []
+
+def track_log_send(coro):
+    task = asyncio.create_task(coro)
+    pending_websocket_logs.append(task)
+    return task
+
+
+class WebSocketLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            if any(tag in msg for tag in ["📄 Result", "✅ Task completed", "❌ Unfinished"]):
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
+                except RuntimeError:
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(send_test_response(CURRENT_SESSION_ID, {"log": msg}), loop)
+        except Exception as e:
+            print(f"[WebSocketLogHandler] erro ao emitir log: {e}")
+
+
 load_dotenv()
 logger = logging.getLogger(__name__)
+logger.addHandler(WebSocketLogHandler())
+
+CURRENT_SESSION_ID: str = None
+
+def set_current_session(id: str):
+    global CURRENT_SESSION_ID
+    CURRENT_SESSION_ID = id
+
 
 SKIP_LLM_API_KEY_VERIFICATION = os.environ.get('SKIP_LLM_API_KEY_VERIFICATION', 'false').lower()[0] in 'ty1'
 
@@ -77,11 +112,29 @@ def log_response(response: AgentOutput) -> None:
     else:
         emoji = '🤷'
 
-    logger.info(f'{emoji} Eval: {response.current_state.evaluation_previous_goal}')
-    logger.info(f'🧠 Memory: {response.current_state.memory}')
-    logger.info(f'🎯 Next goal: {response.current_state.next_goal}')
+    # log evaluation
+    msg = f'{emoji} Eval: {response.current_state.evaluation_previous_goal}'
+    logger.info(msg)
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
+
+    # log memory
+    msg = f'🧠 Memory: {response.current_state.memory}'
+    logger.info(msg)
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
+
+    # log next goal
+    msg = f'🎯 Next goal: {response.current_state.next_goal}'
+    logger.info(msg)
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
+
+    # log each action
     for i, action in enumerate(response.action):
-        logger.info(f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}')
+        msg = (
+            f'🛠️  Action {i + 1}/{len(response.action)}: '
+            f'{action.model_dump_json(exclude_unset=True)}'
+        )
+        logger.info(msg)
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
 
 Context = TypeVar('Context')
@@ -435,7 +488,10 @@ class Agent(Generic[Context]):
     @time_execution_async('--step (agent)')
     async def step(self, step_info: AgentStepInfo | None = None) -> None:
         """Execute one step of the task"""
-        logger.info(f'📍 Step {self.state.n_steps}')
+        msg = f'📍 Step {self.state.n_steps}'
+        logger.info(msg)
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
+
         state = None
         model_output = None
         result: list[ActionResult] = []
@@ -994,6 +1050,10 @@ class Agent(Generic[Context]):
                     # Log any error during script generation/saving
                     logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
 
+            if pending_websocket_logs:
+                await asyncio.gather(*pending_websocket_logs, return_exceptions=True)
+            await close_websocket_connection()
+
             await self.close()
 
             if self.settings.generate_gif:
@@ -1110,24 +1170,37 @@ class Agent(Generic[Context]):
         response: dict[str, Any] = await validator.ainvoke(msg)  # type: ignore
         parsed: ValidationResult = response['parsed']
         is_valid = parsed.is_valid
+
         if not is_valid:
-            logger.info(f'❌ Validator decision: {parsed.reason}')
-            msg = f'The output is not yet correct. {parsed.reason}.'
-            self.state.last_result = [ActionResult(extracted_content=msg, include_in_memory=True)]
+            decision_msg = f'❌ Validator decision: {parsed.reason}'
+            logger.info(decision_msg)
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
+
+            failure_msg = f'The output is not yet correct. {parsed.reason}.'
+            self.state.last_result = [ActionResult(extracted_content=failure_msg, include_in_memory=True)]
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": failure_msg}))
         else:
-            logger.info(f'✅ Validator decision: {parsed.reason}')
+            decision_msg = f'✅ Validator decision: {parsed.reason}'
+            logger.info(decision_msg)
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
+
         return is_valid
 
     async def log_completion(self) -> None:
         """Log the completion of the task"""
         logger.info('✅ Task completed')
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Task completed"}))
+
         if self.state.history.is_successful():
             logger.info('✅ Successfully')
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Successfully"}))
         else:
             logger.info('❌ Unfinished')
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "❌ Unfinished"}))
 
         total_tokens = self.state.history.total_input_tokens()
         logger.info(f'📝 Total input tokens used (approximate): {total_tokens}')
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
 
         if self.register_done_callback:
             if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1289,7 +1362,9 @@ class Agent(Generic[Context]):
 
     def stop(self) -> None:
         """Stop the agent"""
-        logger.info('⏹️ Agent stopping')
+        msg = '⏹️ Agent stopping'
+        logger.info(msg)
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
         self.state.stopped = True
 
     def _convert_initial_actions(self, actions: list[dict[str, dict[str, Any]]]) -> list[ActionModel]:
@@ -1462,3 +1537,33 @@ class Agent(Generic[Context]):
         # Update done action model too
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'], page=page)
         self.DoneAgentOutput = AgentOutput.type_with_custom_actions(self.DoneActionModel)
+
+websocket_connection = None  # conexão persistente
+
+async def send_test_response_via_socket(payload: dict):
+        global websocket_connection
+        uri = os.getenv("TEST_BOOSTER_WEBSOCKET_URL", "")
+        try:
+            if websocket_connection is None or websocket_connection.closed:
+                websocket_connection = await connect(uri)
+            await websocket_connection.send(json.dumps(payload))
+        except Exception as e:
+            print(f"[WS] Erro ao enviar: {e}")
+            websocket_connection = None  # força reconexão
+
+async def send_test_response(request_id: str, response: any):
+        await send_test_response_via_socket({
+            'requestId': request_id,
+            'response': response
+        })
+
+async def close_websocket_connection():
+        global websocket_connection
+        if pending_websocket_logs:
+            await asyncio.gather(*pending_websocket_logs, return_exceptions=True)
+        if websocket_connection is not None:
+            try:
+                await websocket_connection.close()
+            except:
+                pass
+            websocket_connection = None
