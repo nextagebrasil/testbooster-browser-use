@@ -21,10 +21,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
 
-    def start_agent_async(self, task: str, context: str):
-        session_id = str(uuid4())
+    def start_agent_async(self, session_id: str, task: str, context: str):
         browser = Browser()
-
         llm = ChatOpenAI(model='gpt-4o')
         planner_llm = ChatOpenAI(model='o3-mini')
 
@@ -34,16 +32,14 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             browser=browser,
             message_context=context,
             enable_memory=False,
-            planner_llm=planner_llm,  # Separate model for planning
-            use_vision_for_planner=False,  # Disable vision for planner
-            planner_interval=3,  # Plan every 4 steps
+            planner_llm=planner_llm,
+            use_vision_for_planner=False,
+            planner_interval=3,
             use_vision=True,
         )
         session_agents[session_id] = agent
         logging.info(f"Agent iniciado com session_id={session_id}, task={task}")
-        t1 = Thread(target=self.start_agent_sync, args=(agent,))
-        t1.start()
-        return session_id
+        Thread(target=self.start_agent_sync, args=(agent,)).start()
 
     def start_agent_sync(self, agent: Agent):
         result = asyncio.run(agent.run())
@@ -57,17 +53,23 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             logger.setLevel(logging.INFO)
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
             logger.addHandler(handler)
+
             try:
                 request_json = json.loads(post_data)
                 task = request_json.get('task')
                 context = request_json.get('context')
+                session_id = request_json.get('session_id')
+
+                # avisa o agent qual sessão usar
+                from browser_use.agent.service import set_current_session
+                set_current_session(session_id)
 
                 if not task:
                     raise ValueError("Missing task parameter")
 
-                session_id = self.start_agent_async(task, context) # Não esperando result
+                # inicia o agent usando o mesmo session_id vindo do React
+                self.start_agent_async(session_id, task, context)
 
                 response_data = {
                     "status": "success",

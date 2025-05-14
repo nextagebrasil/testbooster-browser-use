@@ -72,6 +72,13 @@ def track_log_send(coro):
     pending_websocket_logs.append(task)
     return task
 
+# logo no topo, antes de tudo
+CURRENT_SESSION_ID: str = ''
+
+def set_current_session(session_id: str):
+    global CURRENT_SESSION_ID
+    CURRENT_SESSION_ID = session_id
+
 
 class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
@@ -80,10 +87,10 @@ class WebSocketLogHandler(logging.Handler):
             if any(tag in msg for tag in ["📄 Result", "✅ Task completed", "❌ Unfinished"]):
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(send_test_response("log", {"log": msg}))
+                    loop.create_task(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
                 except RuntimeError:
                     loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(send_test_response("log", {"log": msg}), loop)
+                    asyncio.run_coroutine_threadsafe(send_test_response(CURRENT_SESSION_ID, {"log": msg}), loop)
         except Exception as e:
             print(f"[WebSocketLogHandler] erro ao emitir log: {e}")
 
@@ -109,17 +116,17 @@ def log_response(response: AgentOutput) -> None:
     # log evaluation
     msg = f'{emoji} Eval: {response.current_state.evaluation_previous_goal}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log memory
     msg = f'🧠 Memory: {response.current_state.memory}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log next goal
     msg = f'🎯 Next goal: {response.current_state.next_goal}'
     logger.info(msg)
-    track_log_send(send_test_response("log", {"log": msg}))
+    track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
     # log each action
     for i, action in enumerate(response.action):
@@ -128,7 +135,7 @@ def log_response(response: AgentOutput) -> None:
             f'{action.model_dump_json(exclude_unset=True)}'
         )
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
 
 Context = TypeVar('Context')
@@ -484,7 +491,7 @@ class Agent(Generic[Context]):
         """Execute one step of the task"""
         msg = f'📍 Step {self.state.n_steps}'
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
 
         state = None
         model_output = None
@@ -902,31 +909,29 @@ class Agent(Generic[Context]):
     # @observe(name='agent.run', ignore_output=True)
     @time_execution_async('--run (agent)')
     async def run(
-            self, max_steps: int = 100, on_step_start: AgentHookFunc | None = None,
+            self,
+            max_steps: int = 100,
+            on_step_start: AgentHookFunc | None = None,
             on_step_end: AgentHookFunc | None = None
     ) -> AgentHistoryList:
-        """Execute the task with maximum number of steps"""
-
         loop = asyncio.get_event_loop()
-        agent_run_error: str | None = None  # Initialize error tracking variable
-        self._force_exit_telemetry_logged = False  # ADDED: Flag for custom telemetry on force exit
+        global pending_websocket_logs
+        pending_websocket_logs.clear()
+        agent_run_error: str | None = None
+        self._force_exit_telemetry_logged = False
 
-        # Set up the Ctrl+C signal handler with callbacks specific to this agent
         from browser_use.utils import SignalHandler
-
-        # Define the custom exit callback function for second CTRL+C
         def on_force_exit_log_telemetry():
             self._log_agent_event(max_steps=max_steps, agent_run_error='SIGINT: Cancelled by user')
-            # NEW: Call the flush method on the telemetry instance
             if hasattr(self, 'telemetry') and self.telemetry:
                 self.telemetry.flush()
-            self._force_exit_telemetry_logged = True  # Set the flag
+            self._force_exit_telemetry_logged = True
 
         signal_handler = SignalHandler(
             loop=loop,
             pause_callback=self.pause,
             resume_callback=self.resume,
-            custom_exit_callback=on_force_exit_log_telemetry,  # Pass the new telemetrycallback
+            custom_exit_callback=on_force_exit_log_telemetry,
             exit_on_second_int=True,
         )
         signal_handler.register()
@@ -934,75 +939,60 @@ class Agent(Generic[Context]):
         try:
             self._log_agent_run()
 
-            # Execute initial actions if provided
             if self.initial_actions:
                 result = await self.multi_act(self.initial_actions, check_for_new_elements=False)
                 self.state.last_result = result
 
             for step in range(max_steps):
-                # Check if waiting for user input after Ctrl+C
                 if self.state.paused:
                     signal_handler.wait_for_resume()
                     signal_handler.reset()
-
-                # Check if we should stop due to too many failures
                 if self.state.consecutive_failures >= self.settings.max_failures:
                     logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
                     agent_run_error = f'Stopped due to {self.settings.max_failures} consecutive failures'
                     break
-
-                # Check control flags before each step
                 if self.state.stopped:
                     logger.info('Agent stopped')
                     agent_run_error = 'Agent stopped programmatically'
                     break
-
                 while self.state.paused:
-                    await asyncio.sleep(0.2)  # Small delay to prevent CPU spinning
-                    if self.state.stopped:  # Allow stopping while paused
+                    await asyncio.sleep(0.2)
+                    if self.state.stopped:
                         agent_run_error = 'Agent stopped programmatically while paused'
                         break
 
-                if on_step_start is not None:
+                if on_step_start:
                     await on_step_start(self)
 
                 step_info = AgentStepInfo(step_number=step, max_steps=max_steps)
                 await self.step(step_info)
 
-                if on_step_end is not None:
+                if on_step_end:
                     await on_step_end(self)
 
                 if self.state.history.is_done():
                     if self.settings.validate_output and step < max_steps - 1:
                         if not await self._validate_output():
                             continue
-
                     await self.log_completion()
                     break
             else:
                 agent_run_error = 'Failed to complete task in maximum steps'
-
                 self.state.history.history.append(
                     AgentHistory(
                         model_output=None,
                         result=[ActionResult(error=agent_run_error, include_in_memory=True)],
                         state=BrowserStateHistory(
-                            url='',
-                            title='',
-                            tabs=[],
-                            interacted_element=[],
-                            screenshot=None,
+                            url='', title='', tabs=[], interacted_element=[], screenshot=None
                         ),
                         metadata=None,
                     )
                 )
-
                 logger.info(f'❌ {agent_run_error}')
 
             return self.state.history
 
         except KeyboardInterrupt:
-            # Already handled by our signal handler, but catch any direct KeyboardInterrupt as well
             logger.info('Got KeyboardInterrupt during execution, returning current history')
             agent_run_error = 'KeyboardInterrupt'
             return self.state.history
@@ -1010,20 +1000,18 @@ class Agent(Generic[Context]):
         except Exception as e:
             logger.error(f'Agent run failed with exception: {e}', exc_info=True)
             agent_run_error = str(e)
-            raise e
+            raise
 
         finally:
-            # Unregister signal handlers before cleanup
             signal_handler.unregister()
 
-            if not self._force_exit_telemetry_logged:  # MODIFIED: Check the flag
+            if not self._force_exit_telemetry_logged:
                 try:
                     self._log_agent_event(max_steps=max_steps, agent_run_error=agent_run_error)
                     logger.info('Agent run telemetry logged.')
-                except Exception as log_e:  # Catch potential errors during logging itself
+                except Exception as log_e:
                     logger.error(f'Failed to log telemetry event: {log_e}', exc_info=True)
             else:
-                # ADDED: Info message when custom telemetry for SIGINT was already logged
                 logger.info('Telemetry for force exit (SIGINT) was logged by custom exit callback.')
 
             if self.settings.save_playwright_script_path:
@@ -1044,17 +1032,19 @@ class Agent(Generic[Context]):
                     # Log any error during script generation/saving
                     logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
 
-            if pending_websocket_logs:
-                await asyncio.gather(*pending_websocket_logs, return_exceptions=True)
+            current_loop = asyncio.get_running_loop()
+            tasks = [t for t in pending_websocket_logs if getattr(t, '_loop', None) is current_loop]
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            pending_websocket_logs.clear()
+
             await close_websocket_connection()
 
             await self.close()
 
             if self.settings.generate_gif:
-                output_path: str = 'agent_history.gif'
-                if isinstance(self.settings.generate_gif, str):
-                    output_path = self.settings.generate_gif
-
+                output_path = self.settings.generate_gif if isinstance(self.settings.generate_gif,
+                                                                       str) else 'agent_history.gif'
                 create_history_gif(task=self.task, history=self.state.history, output_path=output_path)
 
     # @observe(name='controller.multi_act')
@@ -1168,33 +1158,33 @@ class Agent(Generic[Context]):
         if not is_valid:
             decision_msg = f'❌ Validator decision: {parsed.reason}'
             logger.info(decision_msg)
-            track_log_send(send_test_response("log", {"log": decision_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
 
             failure_msg = f'The output is not yet correct. {parsed.reason}.'
             self.state.last_result = [ActionResult(extracted_content=failure_msg, include_in_memory=True)]
-            track_log_send(send_test_response("log", {"log": failure_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": failure_msg}))
         else:
             decision_msg = f'✅ Validator decision: {parsed.reason}'
             logger.info(decision_msg)
-            track_log_send(send_test_response("log", {"log": decision_msg}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": decision_msg}))
 
         return is_valid
 
     async def log_completion(self) -> None:
         """Log the completion of the task"""
         logger.info('✅ Task completed')
-        track_log_send(send_test_response("log", {"log": "✅ Task completed"}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Task completed"}))
 
         if self.state.history.is_successful():
             logger.info('✅ Successfully')
-            track_log_send(send_test_response("log", {"log": "✅ Successfully"}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "✅ Successfully"}))
         else:
             logger.info('❌ Unfinished')
-            track_log_send(send_test_response("log", {"log": "❌ Unfinished"}))
+            track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": "❌ Unfinished"}))
 
         total_tokens = self.state.history.total_input_tokens()
         logger.info(f'📝 Total input tokens used (approximate): {total_tokens}')
-        track_log_send(send_test_response("log", {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
 
         if self.register_done_callback:
             if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1358,7 +1348,7 @@ class Agent(Generic[Context]):
         """Stop the agent"""
         msg = '⏹️ Agent stopping'
         logger.info(msg)
-        track_log_send(send_test_response("log", {"log": msg}))
+        track_log_send(send_test_response(CURRENT_SESSION_ID, {"log": msg}))
         self.state.stopped = True
 
     def _convert_initial_actions(self, actions: list[dict[str, dict[str, Any]]]) -> list[ActionModel]:
