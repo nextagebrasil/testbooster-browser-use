@@ -1,20 +1,20 @@
+import asyncio
 import json
 import logging
-import asyncio
-
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from uuid import uuid4
-from typing import Dict
-from langchain_openai import ChatOpenAI
-from browser_use import Agent, Browser
-from dotenv import load_dotenv
 from threading import Thread
-from browser_use.agent.service import set_current_session
+from typing import Dict
 
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+
+from browser_use import Agent, Browser
+from browser_use.agent.service import set_current_session
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 session_agents: Dict[str, Agent] = {}
+
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
@@ -23,10 +23,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
 
-    def start_agent_async(self, task: str, context: str):
-        session_id = str(uuid4())
+    def start_agent_async(self, session_id: str, task: str, context: str):
         browser = Browser()
-
         llm = ChatOpenAI(model='gpt-4o')
         planner_llm = ChatOpenAI(model='o3-mini')
 
@@ -36,21 +34,21 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             browser=browser,
             message_context=context,
             enable_memory=False,
-            planner_llm=planner_llm,  # Separate model for planning
-            use_vision_for_planner=False,  # Disable vision for planner
-            planner_interval=3,  # Plan every 4 steps
+            planner_llm=planner_llm,
+            use_vision_for_planner=False,
+            planner_interval=3,
             use_vision=True,
         )
         session_agents[session_id] = agent
         set_current_session(session_id)
         logging.info(f"Agent iniciado com session_id={session_id}, task={task}")
-        t1 = Thread(target=self.start_agent_sync, args=(agent,))
-        t1.start()
-        return session_id
+        Thread(target=self.start_agent_sync, args=(agent, session_id)).start()
 
-    def start_agent_sync(self, agent: Agent):
+    def start_agent_sync(self, agent: Agent, session_id: str):
+        from browser_use.agent.service import set_current_session
+        set_current_session(session_id)
         result = asyncio.run(agent.run())
-        #logging.info('\n \n 🔴🔴🔴🔴 result: ' + str(result.status))
+        # logging.info('\n \n 🔴🔴🔴🔴 result: ' + str(result.status))
 
     def do_POST(self):
         if self.path == '/start-agent/':
@@ -61,17 +59,19 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             logger.setLevel(logging.INFO)
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
             logger.addHandler(handler)
+
             try:
                 request_json = json.loads(post_data)
                 task = request_json.get('task')
                 context = request_json.get('context')
+                session_id = request_json.get('session_id')
 
                 if not task:
                     raise ValueError("Missing task parameter")
 
-                session_id = self.start_agent_async(task, context) # Não esperando result
+                # inicia o agent usando o mesmo session_id vindo do React
+                self.start_agent_async(session_id, task, context)
 
                 response_data = {
                     "status": "success",
@@ -104,7 +104,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             # Caso exista método para encerrar o browser, utilize:
             # Exemplo seguro:
             if agent.browser:
-                #logging.info('🔴🔴🔴🔴 agent.browser')
+                # logging.info('🔴🔴🔴🔴 agent.browser')
                 agent.browser.close()
                 agent.pause()
                 agent.close()
