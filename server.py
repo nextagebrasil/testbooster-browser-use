@@ -1,18 +1,19 @@
+import asyncio
 import json
 import logging
-import asyncio
-
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from uuid import uuid4
-from typing import Dict
-from langchain_openai import ChatOpenAI
-from browser_use import Agent, Browser
-from dotenv import load_dotenv
 from threading import Thread
+from typing import Dict
+
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+
+from browser_use import Agent, Browser
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 session_agents: Dict[str, Agent] = {}
+
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
@@ -62,7 +63,6 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 task = request_json.get('task')
                 context = request_json.get('context')
                 session_id = request_json.get('session_id')
-
 
                 if not task:
                     raise ValueError("Missing task parameter")

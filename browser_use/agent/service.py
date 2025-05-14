@@ -20,6 +20,7 @@ from langchain_core.messages import (
 )
 # from lmnr.sdk.decorators import observe
 from pydantic import BaseModel, ValidationError
+from websockets.legacy.client import connect
 
 from browser_use.agent.gif import create_history_gif
 from browser_use.agent.memory.service import Memory
@@ -61,24 +62,24 @@ from browser_use.telemetry.views import (
 )
 from browser_use.utils import check_env_variables, time_execution_async, time_execution_sync
 
-
-import json
-from websockets.legacy.client import connect
-
 pending_websocket_logs: list[asyncio.Task] = []
+
 
 def track_log_send(coro):
     task = asyncio.create_task(coro)
     pending_websocket_logs.append(task)
     return task
 
+
 # no topo do arquivo
 from contextvars import ContextVar
 
 _current_session: ContextVar[str] = ContextVar('current_session')
 
+
 def set_current_session(session_id: str):
     _current_session.set(session_id)
+
 
 def get_current_session() -> str:
     return _current_session.get()
@@ -104,7 +105,6 @@ class WebSocketLogHandler(logging.Handler):
 load_dotenv()
 logger = logging.getLogger(__name__)
 logger.addHandler(WebSocketLogHandler())
-
 
 SKIP_LLM_API_KEY_VERIFICATION = os.environ.get('SKIP_LLM_API_KEY_VERIFICATION', 'false').lower()[0] in 'ty1'
 
@@ -1193,7 +1193,8 @@ class Agent(Generic[Context]):
 
         total_tokens = self.state.history.total_input_tokens()
         logger.info(f'📝 Total input tokens used (approximate): {total_tokens}')
-        track_log_send(send_test_response(session_id, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
+        track_log_send(
+            send_test_response(session_id, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
 
         if self.register_done_callback:
             if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1532,32 +1533,36 @@ class Agent(Generic[Context]):
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'], page=page)
         self.DoneAgentOutput = AgentOutput.type_with_custom_actions(self.DoneActionModel)
 
+
 websocket_connection = None  # conexão persistente
 
+
 async def send_test_response_via_socket(payload: dict):
-        global websocket_connection
-        uri = os.getenv("TEST_BOOSTER_WEBSOCKET_URL", "")
-        try:
-            if websocket_connection is None or websocket_connection.closed:
-                websocket_connection = await connect(uri)
-            await websocket_connection.send(json.dumps(payload))
-        except Exception as e:
-            print(f"[WS] Erro ao enviar: {e}")
-            websocket_connection = None  # força reconexão
+    global websocket_connection
+    uri = os.getenv("TEST_BOOSTER_WEBSOCKET_URL", "")
+    try:
+        if websocket_connection is None or websocket_connection.closed:
+            websocket_connection = await connect(uri)
+        await websocket_connection.send(json.dumps(payload))
+    except Exception as e:
+        print(f"[WS] Erro ao enviar: {e}")
+        websocket_connection = None  # força reconexão
+
 
 async def send_test_response(request_id: str, response: any):
-        await send_test_response_via_socket({
-            'requestId': request_id,
-            'response': response
-        })
+    await send_test_response_via_socket({
+        'requestId': request_id,
+        'response': response
+    })
+
 
 async def close_websocket_connection():
-        global websocket_connection
-        if pending_websocket_logs:
-            await asyncio.gather(*pending_websocket_logs, return_exceptions=True)
-        if websocket_connection is not None:
-            try:
-                await websocket_connection.close()
-            except:
-                pass
-            websocket_connection = None
+    global websocket_connection
+    if pending_websocket_logs:
+        await asyncio.gather(*pending_websocket_logs, return_exceptions=True)
+    if websocket_connection is not None:
+        try:
+            await websocket_connection.close()
+        except:
+            pass
+        websocket_connection = None
