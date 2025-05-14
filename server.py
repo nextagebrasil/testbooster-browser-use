@@ -39,9 +39,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         )
         session_agents[session_id] = agent
         logging.info(f"Agent iniciado com session_id={session_id}, task={task}")
-        Thread(target=self.start_agent_sync, args=(agent,)).start()
+        Thread(target=self.start_agent_sync, args=(agent, session_id)).start()
 
-    def start_agent_sync(self, agent: Agent):
+    def start_agent_sync(self, agent: Agent, session_id: str):
+        from browser_use.agent.service import set_current_session
+        set_current_session(session_id)
         result = asyncio.run(agent.run())
 
     def do_POST(self):
@@ -61,9 +63,6 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 context = request_json.get('context')
                 session_id = request_json.get('session_id')
 
-                # avisa o agent qual sessão usar
-                from browser_use.agent.service import set_current_session
-                set_current_session(session_id)
 
                 if not task:
                     raise ValueError("Missing task parameter")
