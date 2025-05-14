@@ -9,6 +9,8 @@ from langchain_openai import ChatOpenAI
 from browser_use import Agent, Browser
 from dotenv import load_dotenv
 from threading import Thread
+from browser_use.browser.context import BrowserContextConfig
+from browser_use.browser.context import BrowserContext
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -27,11 +29,19 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
         llm = ChatOpenAI(model='gpt-4o')
         planner_llm = ChatOpenAI(model='o3-mini')
+        
+        browserConfig = BrowserContextConfig(
+            highlight_elements=False,
+        )
+        
+        browser = Browser()
+        browserCcontext = BrowserContext(browser=browser, config=browserConfig)
 
         agent = Agent(
             task=task,
             llm=llm,
             browser=browser,
+            browser_context=browserCcontext,
             message_context=context,
             enable_memory=False,
             planner_llm=planner_llm,  # Separate model for planning
