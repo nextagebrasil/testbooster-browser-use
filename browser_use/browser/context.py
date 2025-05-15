@@ -186,6 +186,7 @@ class BrowserContextConfig(BaseModel):
 	timezone_id: str | None = None
 
 	force_new_context: bool = False
+	sessionId: str | None = None
 
 
 @dataclass
@@ -2001,7 +2002,7 @@ class BrowserContext:
 				payload = {
                     "imgStepCompressed": compressed_base64,
                 }
-				track_log_send(send_test_response("img", payload))
+				track_log_send(send_test_response(self.config.sessionId, payload))
 			except Exception as e:
 				logger.exception(f"Erro ao comprimir ou enviar screenshot: {e}")
 		else:
