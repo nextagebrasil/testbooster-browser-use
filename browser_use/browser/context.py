@@ -11,6 +11,9 @@ import os
 import re
 import time
 import uuid
+import zlib
+import base64
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -37,6 +40,7 @@ from browser_use.dom.clickable_element_processor.service import ClickableElement
 from browser_use.dom.service import DomService
 from browser_use.dom.views import DOMElementNode, SelectorMap
 from browser_use.utils import time_execution_async, time_execution_sync
+from browser_use.agent.utils.track_log import track_log_send, send_test_response
 
 if TYPE_CHECKING:
 	from browser_use.browser.browser import Browser
@@ -1203,6 +1207,10 @@ class BrowserContext:
 			# 	)
 
 			screenshot_b64 = await self.take_screenshot()
+			
+   			# Screenshot the page with the current viewport
+			self.screenshot_by_step(screenshot_b64)
+   
 			pixels_above, pixels_below = await self.get_scroll_info(page)
 
 			# Find the agent's active tab ID
@@ -1978,3 +1986,23 @@ class BrowserContext:
 		"""
 		page = await self.get_agent_current_page()
 		await page.wait_for_selector(selector, state='visible', timeout=timeout)
+  
+	def screenshot_by_step(self, screenshot: str) -> None:   
+		"""Capture screenshot and associate with session_id."""		
+		logger = logging.getLogger(__name__)
+		logging.basicConfig(level=logging.INFO)
+		logger.info("Screenshot capturado para o passo.")
+		if screenshot:
+			try:             
+				compressed = zlib.compress(screenshot.encode())
+				compressed_base64 = base64.b64encode(compressed).decode("utf-8")
+				logger.info("Screenshot comprimido. Enviando...")
+                # Envio assíncrono com sinalização de compressão
+				payload = {
+                    "imgStepCompressed": compressed_base64,
+                }
+				track_log_send(send_test_response("img", payload))
+			except Exception as e:
+				logger.exception(f"Erro ao comprimir ou enviar screenshot: {e}")
+		else:
+			logger.error("Nenhum screenshot disponível para o passo.")

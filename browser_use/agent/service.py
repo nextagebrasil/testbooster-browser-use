@@ -62,8 +62,11 @@ from browser_use.telemetry.views import (
 )
 from browser_use.utils import check_env_variables, time_execution_async, time_execution_sync
 
-pending_websocket_logs: list[asyncio.Task] = []
 
+import json
+from websockets.legacy.client import connect
+
+pending_websocket_logs: list[asyncio.Task] = []
 
 def track_log_send(coro):
     task = asyncio.create_task(coro)
