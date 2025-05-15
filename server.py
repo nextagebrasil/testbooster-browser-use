@@ -32,6 +32,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         
         browserConfig = BrowserContextConfig(
             highlight_elements=False,
+            window_width=1280,
+            window_height=720,
         )
         
         browser = Browser()
