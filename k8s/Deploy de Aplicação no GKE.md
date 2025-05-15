@@ -137,6 +137,7 @@ kubectl logs -l app=testbooster-browser-use -f
 
 
 # Processo Resumido:
+1. Atualize a versão da imagem no k8s\deployment.yaml
 docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.5 .
 gcloud auth configure-docker us-east1-docker.pkg.dev
 docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.5
