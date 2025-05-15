@@ -92,7 +92,7 @@ class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
-            if any(tag in msg for tag in ["📄 Result", "✅ Task completed", "❌ Unfinished"]):
+            if any(tag in msg for tag in [" Result", " Task completed", " Unfinished"]):
                 try:
                     loop = asyncio.get_running_loop()
                     session_id = get_current_session()
@@ -116,11 +116,11 @@ def log_response(response: AgentOutput) -> None:
     """Utility function to log the model's response."""
 
     if 'Success' in response.current_state.evaluation_previous_goal:
-        emoji = '👍'
+        emoji = ''
     elif 'Failed' in response.current_state.evaluation_previous_goal:
         emoji = '⚠'
     else:
-        emoji = '🤷'
+        emoji = ''
 
     # log evaluation
     msg = f'{emoji} Eval: {response.current_state.evaluation_previous_goal}'
@@ -129,19 +129,19 @@ def log_response(response: AgentOutput) -> None:
     track_log_send(send_test_response(session_id, {"log": msg}))
 
     # log memory
-    msg = f'🧠 Memory: {response.current_state.memory}'
+    msg = f' Memory: {response.current_state.memory}'
     logger.info(msg)
     track_log_send(send_test_response(session_id, {"log": msg}))
 
     # log next goal
-    msg = f'🎯 Next goal: {response.current_state.next_goal}'
+    msg = f' Next goal: {response.current_state.next_goal}'
     logger.info(msg)
     track_log_send(send_test_response(session_id, {"log": msg}))
 
     # log each action
     for i, action in enumerate(response.action):
         msg = (
-            f'🛠️  Action {i + 1}/{len(response.action)}: '
+            f'  Action {i + 1}/{len(response.action)}: '
             f'{action.model_dump_json(exclude_unset=True)}'
         )
         logger.info(msg)
@@ -287,7 +287,7 @@ class Agent(Generic[Context]):
             self.settings.use_vision_for_planner = False
 
         logger.info(
-            f'🧠 Starting an agent with main_model={self.model_name}'
+            f' Starting an agent with main_model={self.model_name}'
             f'{" +tools" if self.tool_calling_method == "function_calling" else ""}'
             f'{" +rawtools" if self.tool_calling_method == "raw" else ""}'
             f'{" +vision" if self.settings.use_vision else ""}'
@@ -356,8 +356,8 @@ class Agent(Generic[Context]):
         # Huge security warning if sensitive_data is provided but allowed_domains is not set
         if self.sensitive_data and not self.browser_context.config.allowed_domains:
             logger.error(
-                '⚠️⚠️⚠️ Agent(sensitive_data=••••••••) was provided but BrowserContextConfig(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n'
-                '          ☠️ If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n'
+                '⚠️ Agent(sensitive_data=••••••••) was provided but BrowserContextConfig(allowed_domains=[...]) is not locked down! ⚠️⚠️⚠️\n'
+                '           If the agent visits a malicious website and encounters a prompt-injection attack, your sensitive_data may be exposed!\n\n'
                 '             https://docs.browser-use.com/customize/browser-settings#restrict-urls\n'
                 'Waiting 10 seconds before continuing... Press [Ctrl+C] to abort.'
             )
@@ -499,7 +499,7 @@ class Agent(Generic[Context]):
     @time_execution_async('--step (agent)')
     async def step(self, step_info: AgentStepInfo | None = None) -> None:
         """Execute one step of the task"""
-        msg = f'📍 Step {self.state.n_steps}'
+        msg = f'\n \n # Step {self.state.n_steps}'
         logger.info(msg)
         session_id = get_current_session()
         track_log_send(send_test_response(session_id, {"log": msg}))
@@ -634,7 +634,7 @@ class Agent(Generic[Context]):
             self.state.last_result = result
 
             if len(result) > 0 and result[-1].is_done:
-                logger.info(f'📄 Result: {result[-1].extracted_content}')
+                logger.info(f' Result: {result[-1].extracted_content}')
 
             self.state.consecutive_failures = 0
 
@@ -845,7 +845,7 @@ class Agent(Generic[Context]):
 
     def _log_agent_run(self) -> None:
         """Log the agent run"""
-        logger.info(f'🚀 Starting task: {self.task}')
+        logger.info(f' Starting task: {self.task}')
 
         logger.debug(f'Version: {self.version}, Source: {self.source}')
 
@@ -1175,7 +1175,7 @@ class Agent(Generic[Context]):
             self.state.last_result = [ActionResult(extracted_content=failure_msg, include_in_memory=True)]
             track_log_send(send_test_response(session_id, {"log": failure_msg}))
         else:
-            decision_msg = f'✅ Validator decision: {parsed.reason}'
+            decision_msg = f' Validator decision: {parsed.reason}'
             logger.info(decision_msg)
             track_log_send(send_test_response(session_id, {"log": decision_msg}))
 
@@ -1185,19 +1185,31 @@ class Agent(Generic[Context]):
         session_id = get_current_session()
         """Log the completion of the task"""
         logger.info('✅ Task completed')
-        track_log_send(send_test_response(session_id, {"log": "✅ Task completed"}))
+        #track_log_send(send_test_response(session_id, {"log": "✅ Task completed"}))
+        track_log_send(send_test_response(
+            session_id,
+            {
+                "response": {
+                    "log": "\n \n # Task completed",
+                    "success": self.state.history.is_successful(),
+                    "error": not self.state.history.is_successful(),
+                    "result": self.state.history.final_result()
+                }
+            }
+            )
+        )
 
         if self.state.history.is_successful():
             logger.info('✅ Successfully')
-            track_log_send(send_test_response(session_id, {"log": "✅ Successfully"}))
+            track_log_send(send_test_response(session_id, {"log": " Successfully"}))
         else:
             logger.info('❌ Unfinished')
             track_log_send(send_test_response(session_id, {"log": "❌ Unfinished"}))
 
         total_tokens = self.state.history.total_input_tokens()
-        logger.info(f'📝 Total input tokens used (approximate): {total_tokens}')
+        logger.info(f' Total input tokens used (approximate): {total_tokens}')
         track_log_send(
-            send_test_response(session_id, {"log": f'📝 Total input tokens used (approximate): {total_tokens}'}))
+            send_test_response(session_id, {"log": f' Total input tokens used (approximate): {total_tokens}'}))
 
         if self.register_done_callback:
             if inspect.iscoroutinefunction(self.register_done_callback):
@@ -1352,7 +1364,7 @@ class Agent(Generic[Context]):
         # playwright browser is always immediately killed by the first Ctrl+C (no way to stop that)
         # so we need to restart the browser if user wants to continue
         if self.browser:
-            logger.info('🌎 Restarting/reconnecting to browser...')
+            logger.info(' Restarting/reconnecting to browser...')
             loop = asyncio.get_event_loop()
             loop.create_task(self.browser._init())
             loop.create_task(asyncio.sleep(5))
@@ -1360,7 +1372,7 @@ class Agent(Generic[Context]):
     def stop(self) -> None:
         session_id = get_current_session()
         """Stop the agent"""
-        msg = '⏹️ Agent stopping'
+        msg = ' Agent stopping'
         logger.info(msg)
         track_log_send(send_test_response(session_id, {"log": msg}))
         self.state.stopped = True
@@ -1416,7 +1428,7 @@ class Agent(Generic[Context]):
 
             if test_answer in response_text:
                 logger.debug(
-                    f'🪪 LLM API keys {", ".join(required_keys)} work, {self.llm.__class__.__name__} model is connected & responding correctly.'
+                    f' LLM API keys {", ".join(required_keys)} work, {self.llm.__class__.__name__} model is connected & responding correctly.'
                 )
                 self.llm._verified_api_keys = True
                 return True

@@ -61,7 +61,13 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         from browser_use.agent.service import set_current_session
         set_current_session(session_id)
         result = asyncio.run(agent.run())
-        # logging.info('\n \n 🔴🔴🔴🔴 result: ' + str(result.status))
+        # logging.info(str(result))
+        # ultimo_registro = len(result.history) - 1
+        # last_result = result.history[ultimo_registro].result[0]
+        #
+        # success = last_result.success if last_result.success is not None else "undefined"
+        # error = last_result.error if last_result.error is not None else "undefined"
+        # extracted_content = last_result.extracted_content if last_result.extracted_content is not None else "undefined"
 
     def do_POST(self):
         if self.path == '/start-agent/':
