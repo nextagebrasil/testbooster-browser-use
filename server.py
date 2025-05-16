@@ -7,6 +7,7 @@ from typing import Dict
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from browser_use import Agent, Browser
 from browser_use.agent.service import set_current_session
@@ -27,8 +28,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def start_agent_async(self, session_id: str, task: str, context: str):
         browser = Browser()
-        llm = ChatOpenAI(model='gpt-4o')
-        planner_llm = ChatOpenAI(model='o3-mini')
+        llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp')
+        planner_llm = ChatGoogleGenerativeAI(model='gemini-1.5-pro')
         
         browserConfig = BrowserContextConfig(
             highlight_elements=False,

@@ -9,8 +9,8 @@ load_dotenv()
 
 
 async def main():
-    llm = ChatOpenAI(model='gpt-4o')
-    planner_llm = ChatOpenAI(model='o3-mini')
+    llm = ChatOpenAI(model='gemini-1.5-pro-002')
+    planner_llm = ChatOpenAI(model='gemini-1.5-pro-002')
     agent = Agent(
         task="",
         llm=llm,
