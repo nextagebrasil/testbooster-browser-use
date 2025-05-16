@@ -28,8 +28,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def start_agent_async(self, session_id: str, task: str, context: str):
         browser = Browser()
-        llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp')
-        planner_llm = ChatGoogleGenerativeAI(model='gemini-1.5-pro')
+        llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash')
+        planner_llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash')
         
         browserConfig = BrowserContextConfig(
             highlight_elements=False,
