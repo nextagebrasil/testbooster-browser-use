@@ -1,25 +1,25 @@
 # k8s/hpa.yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
+apiVersion: autoscaling/v2         # Versão da API do HPA (v2 permite múltiplas métricas e alvos mais flexíveis)
+kind: HorizontalPodAutoscaler      # Define que este recurso é um HPA (Horizontal Pod Autoscaler)
 metadata:
-  name: web-ui-hpa
+  name: web-ui-hpa                 # Nome único desse HPA dentro do namespace
 spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: testbooster-browser-use
-  minReplicas: 1
-  maxReplicas: 5
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 60
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 70
+  scaleTargetRef: # Referência ao workload que será escalado
+    apiVersion: apps/v1            # API do recurso alvo (no caso, um Deployment em apps/v1)
+    kind: Deployment               # Tipo do recurso alvo (aqui, um Deployment)
+    name: testbooster-browser-use  # Nome exato do Deployment que o HPA vai monitorar
+  minReplicas: 1                   # Quantas réplicas o Deployment deve ter, no mínimo
+  maxReplicas: 5                   # Quantas réplicas o Deployment pode escalar, no máximo
+  metrics: # Lista de métricas usadas para decidir escala
+    - type: Resource                 # Tipo de métrica: baseada em recurso interno do container
+      resource:
+        name: cpu                    # Métrica de CPU
+        target:
+          type: Utilization          # Alvo definido como porcentagem de utilização
+          averageUtilization: 60     # Meta: manter em média 60% de uso de CPU
+    - type: Resource                 # Segunda métrica, também de recurso
+      resource:
+        name: memory                 # Métrica de memória
+        target:
+          type: Utilization          # Alvo definido como porcentagem de utilização
+          averageUtilization: 70     # Meta: manter em média 70% de uso de memória

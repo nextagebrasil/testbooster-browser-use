@@ -139,11 +139,11 @@ kubectl logs -l app=testbooster-browser-use -f
 # Processo Resumido:
 # Atualize a versão da imagem no k8s\deployment.yaml
 ## Buildar nova imagem
-docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.10 .
+docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.11 .
 ## Autentica no google
 gcloud auth configure-docker us-east1-docker.pkg.dev
 ## Sobe a nova imagem
-docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.10
+docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.11
 ## Picka o container correto
 gcloud container clusters get-credentials testbooster-browser-use-cluster --region us-central1 --project testbooster
 ## Pega o número do projeto
@@ -164,9 +164,9 @@ kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/hpa.yaml
 
 ## **7. Acompanhar rollout**
+kubectl rollout restart deployment/testbooster-browser-use
 kubectl rollout status deployment/testbooster-browser-use
 
 
 ## **8. Obter IP externo da aplicação**
 kubectl get svc testbooster-browser-use
-kubectl rollout restart deployment/testbooster-browser-use

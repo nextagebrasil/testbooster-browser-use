@@ -17,18 +17,21 @@ spec:
       serviceAccountName: web-ui-ksa
       containers:
         - name: web-ui
-          image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.10
+          image: us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.11
           ports:
             - containerPort: 9090
           envFrom:
             - secretRef: { name: testbooster-browser-use-env }
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
           resources:
             requests:
-              cpu: "250m"     # garante agendamento
-              memory: "512Mi"
+              cpu: "500m"   # 0.5 vCPU garantida
+              memory: "1Gi"   # 1 GiB garantido para agendamento
             limits:
-              cpu: "1000m"    # até 1 vCPU
-              memory: "1536Mi"   # até 1.5 GB
+              cpu: "2000m"  # até 2 vCPUs
+              memory: "4Gi"    # até 4 GiB de RAM
           readinessProbe:
             tcpSocket:
               port: 9090
@@ -39,3 +42,8 @@ spec:
               port: 9090
             initialDelaySeconds: 60
             periodSeconds: 15
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
