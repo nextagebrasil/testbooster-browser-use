@@ -137,30 +137,36 @@ kubectl logs -l app=testbooster-browser-use -f
 
 
 # Processo Resumido:
-1. Atualize a versão da imagem no k8s\deployment.yaml
-docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.7 .
+# Atualize a versão da imagem no k8s\deployment.yaml
+## Buildar nova imagem
+docker build -f Dockerfile -t us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.8 .
+## Autentica no google
 gcloud auth configure-docker us-east1-docker.pkg.dev
-docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.7
+## Sobe a nova imagem
+docker push us-east1-docker.pkg.dev/testbooster/testbooster-browser-use/testbooster-browser-use:0.0.8
+## Picka o container correto
 gcloud container clusters get-credentials testbooster-browser-use-cluster --region us-central1 --project testbooster
-# 1) Pega o número do projeto
+## Pega o número do projeto
 $projectNumber = gcloud projects describe testbooster --format="value(projectNumber)"
-# 2) Dá permissão ao nó do GKE ler o Artifact Registry
+## Dá permissão ao nó do GKE ler o Artifact Registry
 gcloud artifacts repositories add-iam-policy-binding testbooster-browser-use `
   --location=us-east1 `
   --member="serviceAccount:$projectNumber-compute@developer.gserviceaccount.com" `
   --role="roles/artifactregistry.reader"
 
-`(se teve alteração/criação de variável de ambiente): `kubectl delete secret testbooster-browser-use-env --ignore-not-found
-`(se teve alteração/criação de variável de ambiente): `kubectl create secret generic testbooster-browser-use-env --from-env-file ./.env
+## **se teve alteração/criação de variável de ambiente**, atualiza as credenciais 
+kubectl delete secret testbooster-browser-use-env --ignore-not-found
+kubectl create secret generic testbooster-browser-use-env --from-env-file ./.env
 
-´Alterar o número da imagem no k8s\deployment.yaml 
+## Alterar o número da imagem no k8s\deployment.yaml 
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 kubectl apply -f k8s/hpa.yaml
 
-
-**7. Acompanhar rollout**
+## **7. Acompanhar rollout**
 kubectl rollout status deployment/testbooster-browser-use
 
-**8. Obter IP externo da aplicação**
+
+## **8. Obter IP externo da aplicação**
 kubectl get svc testbooster-browser-use
+kubectl rollout restart deployment/testbooster-browser-use
